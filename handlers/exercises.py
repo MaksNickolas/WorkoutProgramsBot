@@ -14,7 +14,6 @@ from keyboards.inline import (
     cancel_button,
     back_to_day_button,
     finish_workout_button,
-    get_day_keyboard,
     main_menu
 )
 
@@ -183,23 +182,31 @@ async def process_approaches(message: types.Message, state: FSMContext):
         )
 
 
-# === ОТМЕНА ===
+# === ОТМЕНА (ИСПРАВЛЕНО!) ===
 @router.callback_query(lambda c: c.data.startswith("cancel_exercise_"))
 async def cancel_exercise(callback: types.CallbackQuery, state: FSMContext):
+    # Очищаем состояние
     await state.clear()
-    _, program, day = callback.data.split("_", 2)
-    await show_day_exercises(callback)
 
+    # Извлекаем program и day из callback_data
+    # Формат: cancel_exercise_программа_день
+    parts = callback.data.split("_", 2)
+    if len(parts) >= 3:
+        program = parts[1]
+        day = parts[2]
+    else:
+        # Если что-то пошло не так, возвращаем в главное меню
+        await callback.message.edit_text(
+            "Главное меню:",
+            reply_markup=main_menu()
+        )
+        await callback.answer()
+        return
 
-# === ВОЗВРАТ К СПИСКУ ===
-@router.callback_query(lambda c: c.data.startswith("day_"))
-async def show_day_exercises(callback: types.CallbackQuery):
-    _, program, day = callback.data.split("_")
-    user_id = callback.from_user.id
-
+    # Получаем список упражнений для этого дня
     exercises = PROGRAMS[program][day]
-    completed = get_completed_exercises(user_id, day)
-    level = get_user_level(user_id)
+    completed = get_completed_exercises(callback.from_user.id, day)
+    level = get_user_level(callback.from_user.id)
     reps = LEVELS[level]["reps"]
 
     text = f"📅 {day.upper()} | Уровень {level} ({LEVELS[level]['label']})\n\n"
@@ -219,6 +226,8 @@ async def show_day_exercises(callback: types.CallbackQuery):
                 text += " (с весом)"
             text += "\n"
 
+    # Возвращаем клавиатуру дня
+    from keyboards.inline import get_day_keyboard
     await callback.message.edit_text(
         text,
         reply_markup=get_day_keyboard(program, day, completed)
