@@ -30,25 +30,39 @@ def level_menu():
 
 
 def get_day_keyboard(program, day, completed_exercises):
+    """Генерирует кнопки упражнений строго по ID (латиница)"""
     exercises = PROGRAMS[program][day]
     kb = []
+
     for ex in exercises:
+        # Пропускаем дни отдыха
         if ex['sets'] == 0:
             continue
-        ex_id = ex['id']
+
+        ex_id = ex['id']  # Это латиница, например "ryvok_giri"
+
+        # Показываем только НЕвыполненные упражнения
         if ex_id not in completed_exercises:
+            # Красивое название берем из словаря
+            display_name = get_exercise_name(ex_id)
+            # В callback_data кладем ТОЛЬКО латиницу
+            callback_data = f"ex_{program}_{day}_{ex_id}"
+
             kb.append([InlineKeyboardButton(
-                text=f"💪 {get_exercise_name(ex_id)}",
-                callback_data=f"ex_{program}_{day}_{ex_id}"
+                text=f"💪 {display_name}",
+                callback_data=callback_data
             )])
 
+    # Если все упражнения выполнены — показываем кнопку завершения
     if not kb:
         kb.append([InlineKeyboardButton(
             text="✅ Завершить тренировку",
             callback_data=f"finish_workout_{program}_{day}"
         )])
 
+    # Кнопка "Назад"
     kb.append([InlineKeyboardButton(text="🔙 Назад", callback_data=f"program_{program}")])
+
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
