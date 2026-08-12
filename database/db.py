@@ -229,3 +229,24 @@ def get_exercise_history(user_id, program, day, exercise):
     """, (user_id, program, day, exercise))
     result = cursor.fetchone()
     return result if result else None
+
+
+def get_today_exercise_details(user_id, program, day, exercise_id):
+    """
+    Возвращает все подходы по упражнению за сегодняшнюю тренировку
+    с указанием веса и повторений для каждого подхода.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT weight, reps, date 
+        FROM history 
+        WHERE user_id=? AND program=? AND day=? AND exercise_id=?
+        AND date LIKE ?
+        ORDER BY date ASC
+    """, (user_id, program, day, exercise_id, datetime.now().strftime("%Y-%m-%d") + "%"))
+    results = cursor.fetchall()
+    conn.close()
+
+    # Преобразуем в список словарей
+    return [{"weight": row["weight"], "reps": row["reps"], "date": row["date"]} for row in results]
