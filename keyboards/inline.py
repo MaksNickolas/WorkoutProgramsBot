@@ -1,5 +1,5 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from data.programs import PROGRAMS, DAYS
+from data.programs import PROGRAMS, DAYS, get_exercise_name
 
 
 def main_menu():
@@ -35,10 +35,13 @@ def get_day_keyboard(program, day, completed_exercises):
     for ex in exercises:
         if ex['sets'] == 0:
             continue
-        if ex['name'] not in completed_exercises:
+        # Используем ID для callback, но показываем красивое название
+        exercise_id = ex['id']
+        exercise_name = get_exercise_name(exercise_id)
+        if exercise_id not in completed_exercises:
             kb.append([InlineKeyboardButton(
-                text=f"💪 {ex['name']}",
-                callback_data=f"ex_{program}_{day}_{ex['name']}"
+                text=f"💪 {exercise_name}",
+                callback_data=f"ex_{program}_{day}_{exercise_id}"
             )])
 
     if not kb:

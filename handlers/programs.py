@@ -1,6 +1,6 @@
 from aiogram import Router, types
 from keyboards.inline import day_menu, get_day_keyboard
-from data.programs import PROGRAMS, LEVELS
+from data.programs import PROGRAMS, LEVELS, get_exercise_name
 from database.db import get_user_level, get_completed_exercises
 
 router = Router()
@@ -30,12 +30,15 @@ async def show_day_exercises(callback: types.CallbackQuery):
     text += "Выбери упражнение:\n\n"
 
     for ex in exercises:
+        exercise_id = ex['id']
+        exercise_name = get_exercise_name(exercise_id)
+
         if ex['sets'] == 0:
-            text += f"⏸️ {ex['name']}\n"
-        elif ex['name'] in completed:
-            text += f"✅ {ex['name']} (выполнено)\n"
+            text += f"⏸️ {exercise_name}\n"
+        elif exercise_id in completed:
+            text += f"✅ {exercise_name} (выполнено)\n"
         else:
-            text += f"⬜ {ex['name']} — {ex['sets']} подходов по {reps} раз"
+            text += f"⬜ {exercise_name} — {ex['sets']} подходов по {reps} раз"
             if ex['weight']:
                 text += " (с весом)"
             text += "\n"

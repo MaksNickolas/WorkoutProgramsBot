@@ -2,7 +2,7 @@ from aiogram import Router, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from data.programs import PROGRAMS, LEVELS
+from data.programs import PROGRAMS, LEVELS, get_exercise_name
 from database.db import (
     get_user_level,
     get_exercise_history,
@@ -31,34 +31,38 @@ class ExerciseState(StatesGroup):
 # === ОБРАБОТЧИК: НАЖАТИЕ НА УПРАЖНЕНИЕ ===
 @router.callback_query(lambda c: c.data.startswith("ex_"))
 async def start_exercise(callback: types.CallbackQuery, state: FSMContext):
-    _, program, day, exercise = callback.data.split("_", 3)
+    _, program, day, exercise_id = callback.data.split("_", 3)
     user_id = callback.from_user.id
 
     # Проверяем, не выполнено ли уже
     completed = get_completed_exercises(user_id, day)
-    if exercise in completed:
+    if exercise_id in completed:
         await callback.answer("⚠️ Это упражнение уже выполнено!", show_alert=True)
         return
 
+    # Получаем красивое название
+    exercise_name = get_exercise_name(exercise_id)
+
     # Получаем предыдущий результат
-    last_result = get_exercise_history(user_id, program, day, exercise)
+    last_result = get_exercise_history(user_id, program, day, exercise_id)
 
     # Сохраняем в FSM
     await state.update_data(
         program=program,
         day=day,
-        exercise=exercise,
+        exercise=exercise_id,
+        exercise_name=exercise_name,
         last_result=last_result
     )
 
     # Находим настройки упражнения
     exercise_config = None
     for ex in PROGRAMS[program][day]:
-        if ex['name'] == exercise:
+        if ex['id'] == exercise_id:
             exercise_config = ex
             break
 
-    text = f"🏋️ {exercise}\n\n"
+    text = f"🏋️ {exercise_name}\n\n"
 
     # Показываем прошлый результат
     if last_result:
@@ -120,11 +124,11 @@ async def process_reps(message: types.Message, state: FSMContext):
     data = await state.get_data()
     program = data['program']
     day = data['day']
-    exercise = data['exercise']
+    exercise_id = data['exercise']
 
     default_approaches = 0
     for ex in PROGRAMS[program][day]:
-        if ex['name'] == exercise:
+        if ex['id'] == exercise_id:
             default_approaches = ex['sets']
             break
 
@@ -149,13 +153,14 @@ async def process_approaches(message: types.Message, state: FSMContext):
     data = await state.get_data()
     program = data['program']
     day = data['day']
-    exercise = data['exercise']
+    exercise_id = data['exercise']
+    exercise_name = data.get('exercise_name', exercise_id)
     weight = data.get('weight', 0)
     reps = data['reps']
     user_id = message.from_user.id
 
     # Сохраняем результат
-    save_exercise_result(user_id, program, day, exercise, weight, reps, approaches)
+    save_exercise_result(user_id, program, day, exercise_id, weight, reps, approaches)
 
     # Проверяем, все ли упражнения выполнены
     completed = get_completed_exercises(user_id, day)
@@ -166,13 +171,13 @@ async def process_approaches(message: types.Message, state: FSMContext):
 
     if len(completed) >= total_exercises:
         await message.answer(
-            f"✅ Упражнение '{exercise}' выполнено!\n"
+            f"✅ Упражнение '{exercise_name}' выполнено!\n"
             f"🎉 Все упражнения дня завершены!",
             reply_markup=finish_workout_button(program, day)
         )
     else:
         await message.answer(
-            f"✅ Упражнение '{exercise}' выполнено!\n\n"
+            f"✅ Упражнение '{exercise_name}' выполнено!\n\n"
             f"Осталось упражнений: {total_exercises - len(completed)}",
             reply_markup=back_to_day_button(program, day)
         )
@@ -201,12 +206,15 @@ async def show_day_exercises(callback: types.CallbackQuery):
     text += "Выбери упражнение:\n\n"
 
     for ex in exercises:
+        exercise_id = ex['id']
+        exercise_name = get_exercise_name(exercise_id)
+
         if ex['sets'] == 0:
-            text += f"⏸️ {ex['name']}\n"
-        elif ex['name'] in completed:
-            text += f"✅ {ex['name']} (выполнено)\n"
+            text += f"⏸️ {exercise_name}\n"
+        elif exercise_id in completed:
+            text += f"✅ {exercise_name} (выполнено)\n"
         else:
-            text += f"⬜ {ex['name']} — {ex['sets']} подходов по {reps} раз"
+            text += f"⬜ {exercise_name} — {ex['sets']} подходов по {reps} раз"
             if ex['weight']:
                 text += " (с весом)"
             text += "\n"
