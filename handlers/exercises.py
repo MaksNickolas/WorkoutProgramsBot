@@ -1,20 +1,23 @@
 from aiogram import Router, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from datetime import datetime  # ← ДОБАВЛЯЕМ ИМПОРТ!
 
-from data.programs import PROGRAMS, LEVELS, get_exercise_name, get_expander_text
+from data.programs import PROGRAMS, LEVELS, get_exercise_name
 from database.db import (
     get_user_level,
     get_exercise_history,
     get_completed_exercises,
     reset_daily_status,
-    get_connection
+    get_connection,
+    get_today_exercise_details  # ← НОВАЯ ФУНКЦИЯ (добавим ниже)
 )
 from keyboards.inline import (
     cancel_button,
     back_to_day_button,
     finish_workout_button,
-    main_menu
+    main_menu,
+    get_day_keyboard
 )
 
 router = Router()
@@ -22,10 +25,10 @@ router = Router()
 
 # === СОСТОЯНИЯ ДЛЯ ВВОДА ===
 class ExerciseState(StatesGroup):
-    waiting_for_approach = State()  # Ожидание ввода веса и повторений для подхода
+    waiting_for_approach = State()
 
 
-# === ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ: ПОЛУЧИТЬ ОБЩЕЕ КОЛИЧЕСТВО ПОДХОДОВ ===
+# === ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ===
 def get_total_sets(program, day, exercise_id):
     for ex in PROGRAMS[program][day]:
         if ex['id'] == exercise_id:
@@ -39,19 +42,17 @@ async def start_exercise(callback: types.CallbackQuery, state: FSMContext):
     _, program, day, exercise_id = callback.data.split("_", 3)
     user_id = callback.from_user.id
 
-    # Проверяем, не выполнено ли уже
     completed = get_completed_exercises(user_id, day)
     if exercise_id in completed:
         await callback.answer("⚠️ Это упражнение уже выполнено!", show_alert=True)
         return
 
-    # Получаем красивое название
     exercise_name = get_exercise_name(exercise_id)
 
-    # Получаем предыдущий результат
+    # === ПОЛУЧАЕМ ДЕТАЛЬНУЮ ИСТОРИЮ ПО ПОДХОДАМ ===
     last_result = get_exercise_history(user_id, program, day, exercise_id)
+    today_details = get_today_exercise_details(user_id, program, day, exercise_id)
 
-    # Находим настройки упражнения
     exercise_config = None
     total_sets = 0
     has_weight = False
@@ -62,7 +63,6 @@ async def start_exercise(callback: types.CallbackQuery, state: FSMContext):
             has_weight = ex['weight']
             break
 
-    # Сохраняем в FSM
     await state.update_data(
         program=program,
         day=day,
@@ -71,14 +71,21 @@ async def start_exercise(callback: types.CallbackQuery, state: FSMContext):
         has_weight=has_weight,
         total_sets=total_sets,
         current_set=1,
-        approaches_data=[]  # Сюда будем складывать каждый подход
+        approaches_data=[]
     )
 
     text = f"🏋️ {exercise_name}\n\n"
 
-    # Показываем прошлый результат
-    if last_result:
-        text += f"📊 ПОСЛЕДНИЙ РЕЗУЛЬТАТ:\n"
+    # === ПОКАЗЫВАЕМ ДЕТАЛЬНУЮ ИСТОРИЮ (ЕСЛИ ЕСТЬ) ===
+    if today_details:
+        text += f"📊 ТВОЯ ПОСЛЕДНЯЯ ТРЕНИРОВКА ({today_details[0]['date']}):\n"
+        for i, app in enumerate(today_details, 1):
+            weight_str = f"{app['weight']} кг" if has_weight and app['weight'] else "—"
+            text += f"  Подход {i}: {app['reps']} раз × {weight_str}\n"
+        text += "\n"
+    elif last_result and not today_details:
+        # Если есть старая история, но нет записей за сегодня
+        text += f"📊 ПОСЛЕДНИЙ РЕЗУЛЬТАТ (из другой тренировки):\n"
         text += f"Вес: {last_result['weight'] if last_result['weight'] else '—'} кг\n"
         text += f"Повторов: {last_result['reps']}\n"
         text += f"Подходов: {last_result['approaches']}\n"
@@ -86,7 +93,7 @@ async def start_exercise(callback: types.CallbackQuery, state: FSMContext):
     else:
         text += "🔄 Это первая тренировка этого упражнения.\n\n"
 
-    # Запрашиваем первый подход
+    # === ЗАПРАШИВАЕМ ПЕРВЫЙ ПОДХОД ===
     text += f"🔹 ПОДХОД №1 из {total_sets}\n\n"
 
     if has_weight:
@@ -189,12 +196,10 @@ async def process_approach(message: types.Message, state: FSMContext):
         conn.commit()
         await state.clear()
 
-        # Проверяем, все ли упражнения выполнены
         completed = get_completed_exercises(user_id, day)
         exercises = PROGRAMS[program][day]
         total_exercises = len([ex for ex in exercises if ex['sets'] > 0])
 
-        # Формируем итоговый отчет
         summary = f"✅ {exercise_name} — {total_sets} подходов:\n"
         for i, app in enumerate(approaches_data, 1):
             weight_str = f"{app['weight']} кг" if has_weight else "—"
@@ -220,22 +225,22 @@ async def process_approach(message: types.Message, state: FSMContext):
         )
 
         next_set = current_set + 1
-        text = f"🏋️ {exercise_name}\n\n"
-        text += f"✅ Подход №{current_set} сохранен: {reps} раз"
+        response_text = f"🏋️ {exercise_name}\n\n"
+        response_text += f"✅ Подход №{current_set} сохранен: {reps} раз"
         if has_weight:
-            text += f" × {weight} кг"
-        text += "\n\n"
-        text += f"🔹 ПОДХОД №{next_set} из {total_sets}\n\n"
+            response_text += f" × {weight} кг"
+        response_text += "\n\n"
+        response_text += f"🔹 ПОДХОД №{next_set} из {total_sets}\n\n"
 
         if has_weight:
-            text += "✏️ Введите вес (в кг) и количество повторений через пробел:\n"
-            text += "Например: 20 10"
+            response_text += "✏️ Введите вес (в кг) и количество повторений через пробел:\n"
+            response_text += "Например: 20 10"
         else:
-            text += "✏️ Введите количество повторений:\n"
-            text += "Например: 10"
+            response_text += "✏️ Введите количество повторений:\n"
+            response_text += "Например: 10"
 
         await message.answer(
-            text,
+            response_text,
             reply_markup=cancel_button(program, day)
         )
 
@@ -270,7 +275,6 @@ async def cancel_exercise(callback: types.CallbackQuery, state: FSMContext):
                 text += " (с весом)"
             text += "\n"
 
-    from keyboards.inline import get_day_keyboard
     await callback.message.edit_text(
         text,
         reply_markup=get_day_keyboard(program, day, completed)
