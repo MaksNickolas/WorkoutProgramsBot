@@ -14,25 +14,21 @@ from utils.notifications import daily_notification
 
 
 async def main():
-    # Инициализация базы данных
     init_db()
     print("✅ База данных инициализирована")
 
-    # Создаем бота и диспетчер
     bot = Bot(token=BOT_TOKEN)
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
 
-    # Регистрируем роутеры
+    # Регистрируем ВСЕ роутеры
     dp.include_router(common.router)
     dp.include_router(programs.router)
     dp.include_router(exercises.router)
     dp.include_router(stats.router)
 
-    # Запускаем фоновую задачу уведомлений
     asyncio.create_task(daily_notification(bot))
 
-    # Запускаем бота
     print("🚀 Бот запущен!")
     await dp.start_polling(bot)
 
