@@ -1,6 +1,6 @@
 from aiogram import Router, types
 from keyboards.inline import day_menu, get_day_keyboard
-from data.programs import PROGRAMS, LEVELS, get_exercise_name
+from data.programs import PROGRAMS, LEVELS, get_exercise_name, get_expander_text
 from database.db import get_user_level, get_completed_exercises
 
 router = Router()
@@ -38,10 +38,19 @@ async def show_day_exercises(callback: types.CallbackQuery):
         elif exercise_id in completed:
             text += f"✅ {exercise_name} (выполнено)\n"
         else:
-            text += f"⬜ {exercise_name} — {ex['sets']} подходов по {reps} раз"
+            # Используем reps_per_set из программы, если есть, иначе стандартные
+            ex_reps = ex.get('reps_per_set', reps)
+            text += f"⬜ {exercise_name} — {ex['sets']} подходов по {ex_reps} раз"
             if ex['weight']:
                 text += " (с весом)"
+            if 'сек' in str(ex_reps) or ex_reps > 30:
+                text += " (секунд)"
             text += "\n"
+
+    # Добавляем рекомендацию по эспандеру в конце дня
+    expander_text = get_expander_text(program, day)
+    if expander_text and day not in ["чт", "вс"]:
+        text += f"\n---\n{expander_text}"
 
     await callback.message.edit_text(
         text,
