@@ -115,8 +115,7 @@ def get_exercise_history(user_id, program, day, exercise_id):
     if result:
         return {"weight": result["weight"], "reps": result["reps"], "approaches": result["approaches"],
                 "date": result["date"]}
-    else:
-        return {"weight": 0, "reps": 0, "approaches": 0, "date": "—"}
+    return {"weight": 0, "reps": 0, "approaches": 0, "date": "—"}
 
 
 def save_exercise_result(user_id, program, day, exercise_id, weight, reps, approaches):
@@ -144,7 +143,6 @@ def mark_exercise_completed(user_id, day, exercise_id, total_sets):
     conn.commit()
 
 
-# ============= ЭТА ФУНКЦИЯ БЫЛА ОТСУТСТВОВАЛА =============
 def get_recent_history(user_id, limit=10):
     conn = get_connection()
     cursor = conn.cursor()
@@ -156,7 +154,6 @@ def get_recent_history(user_id, limit=10):
     """, (user_id, limit))
     results = cursor.fetchall()
     conn.close()
-
     return [{
         "program": row["program"],
         "day": row["day"],
