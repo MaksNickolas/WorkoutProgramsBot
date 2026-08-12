@@ -2,10 +2,11 @@ import asyncio
 import sys
 from pathlib import Path
 
-# Добавляем корневую папку в путь
 sys.path.append(str(Path(__file__).parent))
 
 from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
+
 from config import BOT_TOKEN
 from database.db import init_db
 from handlers import common, programs, exercises, stats
@@ -13,12 +14,14 @@ from utils.notifications import daily_notification
 
 
 async def main():
-    # Инициализируем базу данных
+    # Инициализация базы данных
     init_db()
+    print("✅ База данных инициализирована")
 
     # Создаем бота и диспетчер
     bot = Bot(token=BOT_TOKEN)
-    dp = Dispatcher()
+    storage = MemoryStorage()
+    dp = Dispatcher(storage=storage)
 
     # Регистрируем роутеры
     dp.include_router(common.router)
@@ -30,6 +33,7 @@ async def main():
     asyncio.create_task(daily_notification(bot))
 
     # Запускаем бота
+    print("🚀 Бот запущен!")
     await dp.start_polling(bot)
 
 

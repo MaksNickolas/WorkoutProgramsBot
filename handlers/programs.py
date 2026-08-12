@@ -1,7 +1,7 @@
 from aiogram import Router, types
-from keyboards.inline import day_menu, exercise_buttons, finish_day_button
+from keyboards.inline import day_menu, get_day_keyboard
 from data.programs import PROGRAMS, LEVELS
-from database.db import get_user_level, get_daily_status
+from database.db import get_user_level, get_completed_exercises
 
 router = Router()
 
@@ -17,36 +17,31 @@ async def choose_program(callback: types.CallbackQuery):
 
 
 @router.callback_query(lambda c: c.data.startswith("day_"))
-async def show_day(callback: types.CallbackQuery):
+async def show_day_exercises(callback: types.CallbackQuery):
     _, program, day = callback.data.split("_")
+    user_id = callback.from_user.id
+
     exercises = PROGRAMS[program][day]
-    level = get_user_level(callback.from_user.id)
+    completed = get_completed_exercises(user_id, day)
+    level = get_user_level(user_id)
     reps = LEVELS[level]["reps"]
 
     text = f"📅 {day.upper()} | Уровень {level} ({LEVELS[level]['label']})\n\n"
+    text += "Выбери упражнение:\n\n"
 
     for ex in exercises:
-        if ex['sets'] > 0:
-            text += f"• {ex['name']} — {ex['sets']} подходов по {reps} раз"
+        if ex['sets'] == 0:
+            text += f"⏸️ {ex['name']}\n"
+        elif ex['name'] in completed:
+            text += f"✅ {ex['name']} (выполнено)\n"
+        else:
+            text += f"⬜ {ex['name']} — {ex['sets']} подходов по {reps} раз"
             if ex['weight']:
                 text += " (с весом)"
             text += "\n"
-        else:
-            text += f"• {ex['name']}\n"
-
-    text += "\n⬇️ Нажми на упражнение:"
-
-    kb = []
-    for ex in exercises:
-        if ex['sets'] > 0:
-            kb.append([types.InlineKeyboardButton(
-                text=ex['name'],
-                callback_data=f"ex_{program}_{day}_{ex['name']}"
-            )])
-    kb.append([types.InlineKeyboardButton(text="🔙 Назад", callback_data=f"program_{program}")])
 
     await callback.message.edit_text(
         text,
-        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=kb)
+        reply_markup=get_day_keyboard(program, day, completed)
     )
     await callback.answer()

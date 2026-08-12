@@ -4,5 +4,9 @@ __pycache__/
 *.db
 *.sqlite3
 venv/
+.venv/
 .idea/
 .vscode/
+.DS_Store
+Thumbs.db
+*.log

@@ -1,6 +1,7 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from data.programs import PROGRAMS, DAYS
 
+
 def main_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🏠 Дом", callback_data="program_дом")],
@@ -10,6 +11,7 @@ def main_menu():
         [InlineKeyboardButton(text="📊 Моя статистика", callback_data="stats")]
     ])
 
+
 def day_menu(program):
     kb = []
     for day in DAYS:
@@ -17,17 +19,6 @@ def day_menu(program):
     kb.append([InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
-def exercise_buttons(program, day, exercise):
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Выполнил подход", callback_data=f"set_{program}_{day}_{exercise}")],
-        [InlineKeyboardButton(text="🏁 Завершить упражнение", callback_data=f"finish_{program}_{day}_{exercise}")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data=f"back_{program}_{day}")]
-    ])
-
-def finish_day_button(program, day):
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎉 ЗАВЕРШИТЬ ДЕНЬ", callback_data=f"finish_day_{program}_{day}")]
-    ])
 
 def level_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -35,4 +26,44 @@ def level_menu():
         [InlineKeyboardButton(text="2️⃣ Средний (12 повторений)", callback_data="level_2")],
         [InlineKeyboardButton(text="3️⃣ Продвинутый (15 повторений)", callback_data="level_3")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]
+    ])
+
+
+def get_day_keyboard(program, day, completed_exercises):
+    exercises = PROGRAMS[program][day]
+    kb = []
+    for ex in exercises:
+        if ex['sets'] == 0:
+            continue
+        if ex['name'] not in completed_exercises:
+            kb.append([InlineKeyboardButton(
+                text=f"💪 {ex['name']}",
+                callback_data=f"ex_{program}_{day}_{ex['name']}"
+            )])
+
+    if not kb:
+        kb.append([InlineKeyboardButton(
+            text="✅ Завершить тренировку",
+            callback_data=f"finish_workout_{program}_{day}"
+        )])
+
+    kb.append([InlineKeyboardButton(text="🔙 Назад", callback_data=f"program_{program}")])
+    return InlineKeyboardMarkup(inline_keyboard=kb)
+
+
+def cancel_button(program, day):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 Отмена", callback_data=f"cancel_exercise_{program}_{day}")]
+    ])
+
+
+def back_to_day_button(program, day):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Вернуться к списку", callback_data=f"day_{program}_{day}")]
+    ])
+
+
+def finish_workout_button(program, day):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Завершить тренировку", callback_data=f"finish_workout_{program}_{day}")]
     ])

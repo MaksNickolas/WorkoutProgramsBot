@@ -20,7 +20,6 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Таблица пользователей
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
@@ -29,7 +28,6 @@ def init_db():
     )
     """)
 
-    # Таблица истории тренировок
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,7 +42,6 @@ def init_db():
     )
     """)
 
-    # Таблица статуса текущего дня
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS daily_status (
         user_id INTEGER,
@@ -56,7 +53,7 @@ def init_db():
     )
     """)
 
-    # Индексы для ускорения запросов
+    # Индексы для ускорения
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_user_date ON history(user_id, date DESC)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_user_program_day ON history(user_id, program, day)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_daily_status_user_day ON daily_status(user_id, day)")
@@ -173,33 +170,62 @@ def reset_daily_status(user_id):
     conn.commit()
 
 
-# === ПРОВЕРКА ВСЕХ УПРАЖНЕНИЙ ДНЯ ===
-def get_day_completion(user_id, program, day):
-    """Возвращает список упражнений с их статусом"""
-    from data.programs import PROGRAMS  # импорт внутри, чтобы избежать циклических ссылок
-
+def get_completed_exercises(user_id, day):
     conn = get_connection()
     cursor = conn.cursor()
-    exercises = PROGRAMS.get(program, {}).get(day, [])
-
-    result = []
-    for ex in exercises:
-        if ex['sets'] > 0:
-            cursor.execute("""
-                SELECT completed FROM daily_status 
-                WHERE user_id=? AND day=? AND exercise=?
-            """, (user_id, day, ex['name']))
-            status = cursor.fetchone()
-            result.append({
-                "name": ex['name'],
-                "completed": status["completed"] if status else False
-            })
-    return result
+    cursor.execute("""
+        SELECT exercise FROM daily_status 
+        WHERE user_id=? AND day=? AND completed=1
+    """, (user_id, day))
+    return [row["exercise"] for row in cursor.fetchall()]
 
 
-def is_day_complete(user_id, program, day):
-    """Проверяет, все ли упражнения дня выполнены"""
-    for item in get_day_completion(user_id, program, day):
-        if not item["completed"]:
-            return False
-    return True
+def save_exercise_result(user_id, program, day, exercise, weight, reps, approaches):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        DELETE FROM history 
+        WHERE user_id=? AND program=? AND day=? AND exercise=? 
+        AND date LIKE ?
+    """, (user_id, program, day, exercise, datetime.now().strftime("%Y-%m-%d") + "%"))
+
+    cursor.execute("""
+        INSERT INTO history (user_id, program, day, exercise, weight, reps, approaches, date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (user_id, program, day, exercise, weight, reps, approaches, datetime.now().strftime("%Y-%m-%d %H:%M")))
+
+    cursor.execute("""
+        INSERT INTO daily_status (user_id, day, exercise, completed, approaches_done)
+        VALUES (?, ?, ?, 1, ?)
+        ON CONFLICT(user_id, day, exercise) DO UPDATE SET 
+            completed = 1,
+            approaches_done = excluded.approaches_done
+    """, (user_id, day, exercise, approaches))
+
+    conn.commit()
+
+
+def get_today_exercise_result(user_id, program, day, exercise):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT weight, reps, approaches FROM history 
+        WHERE user_id=? AND program=? AND day=? AND exercise=?
+        AND date LIKE ?
+        ORDER BY date DESC LIMIT 1
+    """, (user_id, program, day, exercise, datetime.now().strftime("%Y-%m-%d") + "%"))
+    result = cursor.fetchone()
+    return result if result else None
+
+
+def get_exercise_history(user_id, program, day, exercise):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT weight, reps, approaches, date FROM history 
+        WHERE user_id=? AND program=? AND day=? AND exercise=?
+        ORDER BY date DESC LIMIT 1
+    """, (user_id, program, day, exercise))
+    result = cursor.fetchone()
+    return result if result else None
