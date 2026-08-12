@@ -1,5 +1,6 @@
 from aiogram import Router, types
 from database.db import get_recent_history
+from data.programs import get_exercise_name
 from keyboards.inline import main_menu
 
 router = Router()
@@ -19,7 +20,8 @@ async def show_stats(callback: types.CallbackQuery):
 
     text = "📊 ПОСЛЕДНИЕ ТРЕНИРОВКИ:\n\n"
     for h in history[:5]:
-        text += f"• {h['program'].upper()} {h['day'].upper()}: {h['exercise']}\n"
+        exercise_name = get_exercise_name(h['exercise_id'])
+        text += f"• {h['program'].upper()} {h['day'].upper()}: {exercise_name}\n"
         text += f"  {h['reps']} раз, {h['weight'] if h['weight'] else '—'} кг, {h['approaches']} подходов\n"
         text += f"  📅 {h['date']}\n\n"
 

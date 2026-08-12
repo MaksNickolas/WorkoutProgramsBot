@@ -5,6 +5,7 @@ from database.db import get_user_level, get_completed_exercises
 
 router = Router()
 
+
 @router.callback_query(lambda c: c.data.startswith("program_"))
 async def choose_program(callback: types.CallbackQuery):
     program = callback.data.split("_")[1]
@@ -13,6 +14,7 @@ async def choose_program(callback: types.CallbackQuery):
         reply_markup=day_menu(program)
     )
     await callback.answer()
+
 
 @router.callback_query(lambda c: c.data.startswith("day_"))
 async def show_day_exercises(callback: types.CallbackQuery):
@@ -28,15 +30,20 @@ async def show_day_exercises(callback: types.CallbackQuery):
     text += "Выбери упражнение:\n\n"
 
     for ex in exercises:
-        ex_id = ex['id']
-        ex_name = get_exercise_name(ex_id)
-        if ex['sets'] == 0:
-            text += f"⏸️ {ex_name}\n"
-        elif ex_id in completed:
-            text += f"✅ {ex_name} (выполнено)\n"
-        else:
-            text += f"⬜ {ex_name} — {ex['sets']} подходов\n"
+        exercise_id = ex['id']
+        exercise_name = get_exercise_name(exercise_id)
 
+        if ex['sets'] == 0:
+            text += f"⏸️ {exercise_name}\n"
+        elif exercise_id in completed:
+            text += f"✅ {exercise_name} (выполнено)\n"
+        else:
+            text += f"⬜ {exercise_name} — {ex['sets']} подходов"
+            if ex['weight']:
+                text += " (с весом)"
+            text += "\n"
+
+    # Добавляем рекомендацию по эспандеру в конце дня
     expander_text = get_expander_text(program, day)
     if expander_text and day not in ["чт", "вс"]:
         text += f"\n---\n{expander_text}"

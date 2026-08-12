@@ -6,13 +6,16 @@ DB_NAME = "progress.db"
 _db_local = threading.local()
 
 
+# === ПОДКЛЮЧЕНИЕ К БД ===
 def get_connection():
+    """Одно подключение на поток (для скорости)"""
     if not hasattr(_db_local, "connection"):
         _db_local.connection = sqlite3.connect(DB_NAME, check_same_thread=False)
         _db_local.connection.row_factory = sqlite3.Row
     return _db_local.connection
 
 
+# === ИНИЦИАЛИЗАЦИЯ ТАБЛИЦ ===
 def init_db():
     conn = get_connection()
     cursor = conn.cursor()
@@ -50,6 +53,7 @@ def init_db():
     )
     """)
 
+    # Индексы для ускорения
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_user_date ON history(user_id, date DESC)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_user_program_day ON history(user_id, program, day)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_daily_status_user_day ON daily_status(user_id, day)")
@@ -58,6 +62,7 @@ def init_db():
     print("✅ База данных инициализирована")
 
 
+# === ПОЛЬЗОВАТЕЛИ ===
 def get_user_level(user_id):
     conn = get_connection()
     cursor = conn.cursor()
@@ -69,60 +74,32 @@ def get_user_level(user_id):
 def set_user_level(user_id, level):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT OR REPLACE INTO users (user_id, level, last_notification) VALUES (?, ?, ?)",
-                   (user_id, level, datetime.now().date()))
+    cursor.execute("""
+        INSERT OR REPLACE INTO users (user_id, level, last_notification) 
+        VALUES (?, ?, ?)
+    """, (user_id, level, datetime.now().date()))
     conn.commit()
 
 
-def get_completed_exercises(user_id, day):
+def get_last_notification(user_id):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT exercise_id FROM daily_status WHERE user_id=? AND day=? AND completed=1", (user_id, day))
-    return [row["exercise_id"] for row in cursor.fetchall()]
-
-
-def reset_daily_status(user_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM daily_status WHERE user_id=?", (user_id,))
-    conn.commit()
-
-
-def get_today_exercise_details(user_id, program, day, exercise_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT weight, reps, date FROM history 
-        WHERE user_id=? AND program=? AND day=? AND exercise_id=?
-        AND date LIKE ?
-        ORDER BY date ASC
-    """, (user_id, program, day, exercise_id, datetime.now().strftime("%Y-%m-%d") + "%"))
-    results = cursor.fetchall()
-    conn.close()
-    return [{"weight": row["weight"], "reps": row["reps"], "date": row["date"]} for row in results]
-
-
-def get_exercise_history(user_id, program, day, exercise_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT weight, reps, approaches, date FROM history 
-        WHERE user_id=? AND program=? AND day=? AND exercise_id=?
-        ORDER BY date DESC LIMIT 1
-    """, (user_id, program, day, exercise_id))
+    cursor.execute("SELECT last_notification FROM users WHERE user_id=?", (user_id,))
     result = cursor.fetchone()
-    conn.close()
-    if result:
-        return {"weight": result["weight"], "reps": result["reps"], "approaches": result["approaches"],
-                "date": result["date"]}
-    return {"weight": 0, "reps": 0, "approaches": 0, "date": "—"}
+    return result["last_notification"] if result else None
 
 
-def save_exercise_result(user_id, program, day, exercise_id, weight, reps, approaches):
+def update_last_notification(user_id, date):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM history WHERE user_id=? AND program=? AND day=? AND exercise_id=? AND date LIKE ?",
-                   (user_id, program, day, exercise_id, datetime.now().strftime("%Y-%m-%d") + "%"))
+    cursor.execute("UPDATE users SET last_notification = ? WHERE user_id = ?", (date, user_id))
+    conn.commit()
+
+
+# === ИСТОРИЯ ===
+def save_history(user_id, program, day, exercise_id, weight, reps, approaches):
+    conn = get_connection()
+    cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO history (user_id, program, day, exercise_id, weight, reps, approaches, date)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -130,17 +107,16 @@ def save_exercise_result(user_id, program, day, exercise_id, weight, reps, appro
     conn.commit()
 
 
-def mark_exercise_completed(user_id, day, exercise_id, total_sets):
+def get_last_history(user_id, program, day, exercise_id):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO daily_status (user_id, day, exercise_id, completed, approaches_done)
-        VALUES (?, ?, ?, 1, ?)
-        ON CONFLICT(user_id, day, exercise_id) DO UPDATE SET 
-            completed = 1,
-            approaches_done = excluded.approaches_done
-    """, (user_id, day, exercise_id, total_sets))
-    conn.commit()
+        SELECT weight, reps, approaches FROM history 
+        WHERE user_id=? AND program=? AND day=? AND exercise_id=?
+        ORDER BY date DESC LIMIT 1
+    """, (user_id, program, day, exercise_id))
+    result = cursor.fetchone()
+    return result if result else None
 
 
 def get_recent_history(user_id, limit=10):
@@ -152,14 +128,104 @@ def get_recent_history(user_id, limit=10):
         WHERE user_id=? 
         ORDER BY date DESC LIMIT ?
     """, (user_id, limit))
-    results = cursor.fetchall()
-    conn.close()
-    return [{
-        "program": row["program"],
-        "day": row["day"],
-        "exercise": row["exercise_id"],
-        "weight": row["weight"],
-        "reps": row["reps"],
-        "approaches": row["approaches"],
-        "date": row["date"]
-    } for row in results]
+    return cursor.fetchall()
+
+
+# === СТАТУС ДНЯ ===
+def get_daily_status(user_id, day, exercise_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT completed, approaches_done FROM daily_status 
+        WHERE user_id=? AND day=? AND exercise_id=?
+    """, (user_id, day, exercise_id))
+    result = cursor.fetchone()
+    return result if result else None
+
+
+def update_daily_status(user_id, day, exercise_id, approaches_done=None, completed=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if approaches_done is not None:
+        cursor.execute("""
+            INSERT INTO daily_status (user_id, day, exercise_id, approaches_done, completed)
+            VALUES (?, ?, ?, 1, 0)
+            ON CONFLICT(user_id, day, exercise_id) DO UPDATE SET approaches_done = approaches_done + 1
+        """, (user_id, day, exercise_id))
+
+    if completed is not None:
+        cursor.execute("""
+            UPDATE daily_status SET completed = ? 
+            WHERE user_id=? AND day=? AND exercise_id=?
+        """, (completed, user_id, day, exercise_id))
+
+    conn.commit()
+
+
+def reset_daily_status(user_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM daily_status WHERE user_id=?", (user_id,))
+    conn.commit()
+
+
+def get_completed_exercises(user_id, day):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT exercise_id FROM daily_status 
+        WHERE user_id=? AND day=? AND completed=1
+    """, (user_id, day))
+    return [row["exercise_id"] for row in cursor.fetchall()]
+
+
+def save_exercise_result(user_id, program, day, exercise_id, weight, reps, approaches):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        DELETE FROM history 
+        WHERE user_id=? AND program=? AND day=? AND exercise_id=? 
+        AND date LIKE ?
+    """, (user_id, program, day, exercise_id, datetime.now().strftime("%Y-%m-%d") + "%"))
+
+    cursor.execute("""
+        INSERT INTO history (user_id, program, day, exercise_id, weight, reps, approaches, date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (user_id, program, day, exercise_id, weight, reps, approaches, datetime.now().strftime("%Y-%m-%d %H:%M")))
+
+    cursor.execute("""
+        INSERT INTO daily_status (user_id, day, exercise_id, completed, approaches_done)
+        VALUES (?, ?, ?, 1, ?)
+        ON CONFLICT(user_id, day, exercise_id) DO UPDATE SET 
+            completed = 1,
+            approaches_done = excluded.approaches_done
+    """, (user_id, day, exercise_id, approaches))
+
+    conn.commit()
+
+
+def get_today_exercise_result(user_id, program, day, exercise_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT weight, reps, approaches FROM history 
+        WHERE user_id=? AND program=? AND day=? AND exercise_id=?
+        AND date LIKE ?
+        ORDER BY date DESC LIMIT 1
+    """, (user_id, program, day, exercise_id, datetime.now().strftime("%Y-%m-%d") + "%"))
+    result = cursor.fetchone()
+    return result if result else None
+
+
+def get_exercise_history(user_id, program, day, exercise_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT weight, reps, approaches, date FROM history 
+        WHERE user_id=? AND program=? AND day=? AND exercise_id=?
+        ORDER BY date DESC LIMIT 1
+    """, (user_id, program, day, exercise_id))
+    result = cursor.fetchone()
+    return result if result else None

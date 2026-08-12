@@ -5,7 +5,6 @@ from config import ADMIN_ID
 
 
 async def daily_notification(bot: Bot):
-    """Отправляет уведомления в 8:00"""
     while True:
         now = datetime.now()
 
