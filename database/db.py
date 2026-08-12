@@ -1,20 +1,26 @@
 import sqlite3
 from datetime import datetime
+import threading
 
 DB_NAME = "progress.db"
+_db_local = threading.local()
 
 
+# === ПОДКЛЮЧЕНИЕ К БД ===
 def get_connection():
-    """Создает подключение к БД"""
-    conn = sqlite3.connect(DB_NAME, check_same_thread=False)
-    return conn
+    """Одно подключение на поток (для скорости)"""
+    if not hasattr(_db_local, "connection"):
+        _db_local.connection = sqlite3.connect(DB_NAME, check_same_thread=False)
+        _db_local.connection.row_factory = sqlite3.Row
+    return _db_local.connection
 
 
+# === ИНИЦИАЛИЗАЦИЯ ТАБЛИЦ ===
 def init_db():
-    """Создает таблицы при первом запуске"""
     conn = get_connection()
     cursor = conn.cursor()
 
+    # Таблица пользователей
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
@@ -23,6 +29,7 @@ def init_db():
     )
     """)
 
+    # Таблица истории тренировок
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,6 +44,7 @@ def init_db():
     )
     """)
 
+    # Таблица статуса текущего дня
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS daily_status (
         user_id INTEGER,
@@ -48,27 +56,32 @@ def init_db():
     )
     """)
 
+    # Индексы для ускорения запросов
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_user_date ON history(user_id, date DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_user_program_day ON history(user_id, program, day)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_daily_status_user_day ON daily_status(user_id, day)")
+
     conn.commit()
-    conn.close()
+    print("✅ База данных инициализирована")
 
 
-# === РАБОТА С ПОЛЬЗОВАТЕЛЯМИ ===
+# === ПОЛЬЗОВАТЕЛИ ===
 def get_user_level(user_id):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT level FROM users WHERE user_id=?", (user_id,))
     result = cursor.fetchone()
-    conn.close()
-    return result[0] if result else 1
+    return result["level"] if result else 1
 
 
 def set_user_level(user_id, level):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT OR REPLACE INTO users (user_id, level, last_notification) VALUES (?, ?, ?)",
-                   (user_id, level, datetime.now().date()))
+    cursor.execute("""
+        INSERT OR REPLACE INTO users (user_id, level, last_notification) 
+        VALUES (?, ?, ?)
+    """, (user_id, level, datetime.now().date()))
     conn.commit()
-    conn.close()
 
 
 def get_last_notification(user_id):
@@ -76,8 +89,7 @@ def get_last_notification(user_id):
     cursor = conn.cursor()
     cursor.execute("SELECT last_notification FROM users WHERE user_id=?", (user_id,))
     result = cursor.fetchone()
-    conn.close()
-    return result[0] if result else None
+    return result["last_notification"] if result else None
 
 
 def update_last_notification(user_id, date):
@@ -85,10 +97,9 @@ def update_last_notification(user_id, date):
     cursor = conn.cursor()
     cursor.execute("UPDATE users SET last_notification = ? WHERE user_id = ?", (date, user_id))
     conn.commit()
-    conn.close()
 
 
-# === РАБОТА С ИСТОРИЕЙ ===
+# === ИСТОРИЯ ===
 def save_history(user_id, program, day, exercise, weight, reps, approaches):
     conn = get_connection()
     cursor = conn.cursor()
@@ -97,7 +108,6 @@ def save_history(user_id, program, day, exercise, weight, reps, approaches):
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (user_id, program, day, exercise, weight, reps, approaches, datetime.now().strftime("%Y-%m-%d %H:%M")))
     conn.commit()
-    conn.close()
 
 
 def get_last_history(user_id, program, day, exercise):
@@ -109,8 +119,7 @@ def get_last_history(user_id, program, day, exercise):
         ORDER BY date DESC LIMIT 1
     """, (user_id, program, day, exercise))
     result = cursor.fetchone()
-    conn.close()
-    return result
+    return result if result else None
 
 
 def get_recent_history(user_id, limit=10):
@@ -122,12 +131,10 @@ def get_recent_history(user_id, limit=10):
         WHERE user_id=? 
         ORDER BY date DESC LIMIT ?
     """, (user_id, limit))
-    result = cursor.fetchall()
-    conn.close()
-    return result
+    return cursor.fetchall()
 
 
-# === РАБОТА СО СТАТУСОМ ДНЯ ===
+# === СТАТУС ДНЯ ===
 def get_daily_status(user_id, day, exercise):
     conn = get_connection()
     cursor = conn.cursor()
@@ -136,8 +143,7 @@ def get_daily_status(user_id, day, exercise):
         WHERE user_id=? AND day=? AND exercise=?
     """, (user_id, day, exercise))
     result = cursor.fetchone()
-    conn.close()
-    return result
+    return result if result else None
 
 
 def update_daily_status(user_id, day, exercise, approaches_done=None, completed=None):
@@ -147,23 +153,53 @@ def update_daily_status(user_id, day, exercise, approaches_done=None, completed=
     if approaches_done is not None:
         cursor.execute("""
             INSERT INTO daily_status (user_id, day, exercise, approaches_done, completed)
-            VALUES (?, ?, ?, ?, 0)
+            VALUES (?, ?, ?, 1, 0)
             ON CONFLICT(user_id, day, exercise) DO UPDATE SET approaches_done = approaches_done + 1
         """, (user_id, day, exercise))
 
     if completed is not None:
         cursor.execute("""
-            UPDATE daily_status SET completed = ? WHERE user_id=? AND day=? AND exercise=?
+            UPDATE daily_status SET completed = ? 
+            WHERE user_id=? AND day=? AND exercise=?
         """, (completed, user_id, day, exercise))
 
     conn.commit()
-    conn.close()
 
 
 def reset_daily_status(user_id):
-    """Очищает статус для нового дня"""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM daily_status WHERE user_id=?", (user_id,))
     conn.commit()
-    conn.close()
+
+
+# === ПРОВЕРКА ВСЕХ УПРАЖНЕНИЙ ДНЯ ===
+def get_day_completion(user_id, program, day):
+    """Возвращает список упражнений с их статусом"""
+    from data.programs import PROGRAMS  # импорт внутри, чтобы избежать циклических ссылок
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    exercises = PROGRAMS.get(program, {}).get(day, [])
+
+    result = []
+    for ex in exercises:
+        if ex['sets'] > 0:
+            cursor.execute("""
+                SELECT completed FROM daily_status 
+                WHERE user_id=? AND day=? AND exercise=?
+            """, (user_id, day, ex['name']))
+            status = cursor.fetchone()
+            result.append({
+                "name": ex['name'],
+                "completed": status["completed"] if status else False
+            })
+    return result
+
+
+def is_day_complete(user_id, program, day):
+    """Проверяет, все ли упражнения дня выполнены"""
+    for item in get_day_completion(user_id, program, day):
+        if not item["completed"]:
+            return False
+    return True
