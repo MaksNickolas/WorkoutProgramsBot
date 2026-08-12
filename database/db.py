@@ -55,7 +55,7 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_daily_status_user_day ON daily_status(user_id, day)")
 
     conn.commit()
-    print("✅ База данных инициализирована (с поддержкой exercise_id)")
+    print("✅ База данных инициализирована")
 
 
 def get_user_level(user_id):
@@ -122,16 +122,12 @@ def get_exercise_history(user_id, program, day, exercise_id):
 def save_exercise_result(user_id, program, day, exercise_id, weight, reps, approaches):
     conn = get_connection()
     cursor = conn.cursor()
-    # Удаляем старые записи за сегодня
     cursor.execute("DELETE FROM history WHERE user_id=? AND program=? AND day=? AND exercise_id=? AND date LIKE ?",
                    (user_id, program, day, exercise_id, datetime.now().strftime("%Y-%m-%d") + "%"))
-    # Сохраняем новый подход
     cursor.execute("""
         INSERT INTO history (user_id, program, day, exercise_id, weight, reps, approaches, date)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (user_id, program, day, exercise_id, weight, reps, approaches, datetime.now().strftime("%Y-%m-%d %H:%M")))
-
-    # Отмечаем как выполненное (если это был последний подход - логика снаружи)
     conn.commit()
 
 
@@ -146,3 +142,27 @@ def mark_exercise_completed(user_id, day, exercise_id, total_sets):
             approaches_done = excluded.approaches_done
     """, (user_id, day, exercise_id, total_sets))
     conn.commit()
+
+
+# ============= ЭТА ФУНКЦИЯ БЫЛА ОТСУТСТВОВАЛА =============
+def get_recent_history(user_id, limit=10):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT program, day, exercise_id, weight, reps, approaches, date 
+        FROM history 
+        WHERE user_id=? 
+        ORDER BY date DESC LIMIT ?
+    """, (user_id, limit))
+    results = cursor.fetchall()
+    conn.close()
+
+    return [{
+        "program": row["program"],
+        "day": row["day"],
+        "exercise": row["exercise_id"],
+        "weight": row["weight"],
+        "reps": row["reps"],
+        "approaches": row["approaches"],
+        "date": row["date"]
+    } for row in results]
