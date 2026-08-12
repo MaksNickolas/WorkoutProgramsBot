@@ -1,16 +1,18 @@
 from aiogram import Router, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from datetime import datetime  # ← ДОБАВЛЯЕМ ИМПОРТ!
+from datetime import datetime
 
-from data.programs import PROGRAMS, LEVELS, get_exercise_name
+from data.programs import PROGRAMS, LEVELS, get_exercise_name, get_expander_text
 from database.db import (
     get_user_level,
     get_exercise_history,
     get_completed_exercises,
     reset_daily_status,
     get_connection,
-    get_today_exercise_details  # ← НОВАЯ ФУНКЦИЯ (добавим ниже)
+    get_today_exercise_details,
+    save_exercise_result,
+    mark_exercise_completed
 )
 from keyboards.inline import (
     cancel_button,
@@ -23,12 +25,10 @@ from keyboards.inline import (
 router = Router()
 
 
-# === СОСТОЯНИЯ ДЛЯ ВВОДА ===
 class ExerciseState(StatesGroup):
     waiting_for_approach = State()
 
 
-# === ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ===
 def get_total_sets(program, day, exercise_id):
     for ex in PROGRAMS[program][day]:
         if ex['id'] == exercise_id:
@@ -36,29 +36,26 @@ def get_total_sets(program, day, exercise_id):
     return 0
 
 
-# === ОБРАБОТЧИК: НАЖАТИЕ НА УПРАЖНЕНИЕ ===
 @router.callback_query(lambda c: c.data.startswith("ex_"))
 async def start_exercise(callback: types.CallbackQuery, state: FSMContext):
     _, program, day, exercise_id = callback.data.split("_", 3)
     user_id = callback.from_user.id
 
+    # Проверяем, не выполнено ли уже
     completed = get_completed_exercises(user_id, day)
     if exercise_id in completed:
         await callback.answer("⚠️ Это упражнение уже выполнено!", show_alert=True)
         return
 
     exercise_name = get_exercise_name(exercise_id)
-
-    # === ПОЛУЧАЕМ ДЕТАЛЬНУЮ ИСТОРИЮ ПО ПОДХОДАМ ===
     last_result = get_exercise_history(user_id, program, day, exercise_id)
     today_details = get_today_exercise_details(user_id, program, day, exercise_id)
 
-    exercise_config = None
+    # Настройки упражнения
     total_sets = 0
     has_weight = False
     for ex in PROGRAMS[program][day]:
         if ex['id'] == exercise_id:
-            exercise_config = ex
             total_sets = ex['sets']
             has_weight = ex['weight']
             break
@@ -76,42 +73,33 @@ async def start_exercise(callback: types.CallbackQuery, state: FSMContext):
 
     text = f"🏋️ {exercise_name}\n\n"
 
-    # === ПОКАЗЫВАЕМ ДЕТАЛЬНУЮ ИСТОРИЮ ===
+    # === ПОКАЗЫВАЕМ ИСТОРИЮ ===
     if today_details:
-        text += f"📊 ТВОЯ ПОСЛЕДНЯЯ ТРЕНИРОВКА ({today_details[0]['date']}):\n"
+        text += f"📊 Твоя тренировка сегодня ({today_details[0]['date']}):\n"
         for i, app in enumerate(today_details, 1):
             weight_str = f"{app['weight']} кг" if has_weight and app['weight'] else "—"
             text += f"  Подход {i}: {app['reps']} раз × {weight_str}\n"
         text += "\n"
-    elif last_result and last_result.get('date') != "—":
-        text += f"📊 ПОСЛЕДНИЙ РЕЗУЛЬТАТ (из другой тренировки):\n"
-        weight_str = f"{last_result['weight']} кг" if has_weight and last_result['weight'] else "—"
-        text += f"Вес: {weight_str}\n"
-        text += f"Повторов: {last_result['reps']}\n"
-        text += f"Подходов: {last_result['approaches']}\n"
-        text += f"📅 {last_result['date']}\n\n"
+    elif last_result and last_result.get('date') != "—" and last_result.get('reps', 0) > 0:
+        text += f"📊 Последний результат (другая тренировка):\n"
+        weight_str = f"{last_result['weight']} кг" if has_weight and last_result.get('weight', 0) else "—"
+        text += f"  Вес: {weight_str}, Повторов: {last_result['reps']}, Подходов: {last_result['approaches']}\n"
+        text += f"  📅 {last_result['date']}\n\n"
     else:
         text += "🔄 Это первая тренировка этого упражнения.\n\n"
 
-    # === ЗАПРАШИВАЕМ ПЕРВЫЙ ПОДХОД ===
+    # === ПЕРВЫЙ ПОДХОД ===
     text += f"🔹 ПОДХОД №1 из {total_sets}\n\n"
-
     if has_weight:
-        text += "✏️ Введите вес (в кг) и количество повторений через пробел:\n"
-        text += "Например: 20 10"
+        text += "✏️ Введите вес (кг) и повторения через пробел:\nПример: 20 10"
     else:
-        text += "✏️ Введите количество повторений:\n"
-        text += "Например: 10"
+        text += "✏️ Введите количество повторений:\nПример: 10"
 
-    await callback.message.edit_text(
-        text,
-        reply_markup=cancel_button(program, day)
-    )
+    await callback.message.edit_text(text, reply_markup=cancel_button(program, day))
     await state.set_state(ExerciseState.waiting_for_approach)
     await callback.answer()
 
 
-# === ОБРАБОТЧИК: ВВОД ПОДХОДА ===
 @router.message(ExerciseState.waiting_for_approach)
 async def process_approach(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -125,127 +113,84 @@ async def process_approach(message: types.Message, state: FSMContext):
     approaches_data = data.get('approaches_data', [])
 
     user_id = message.from_user.id
-    text = message.text.strip()
+    raw_text = message.text.strip()
 
-    # Парсим ввод
+    # === ПАРСИНГ ===
     if has_weight:
-        parts = text.split()
+        parts = raw_text.split()
         if len(parts) != 2:
-            await message.answer(
-                "❌ Введи вес и повторения через пробел.\n"
-                "Например: 20 10"
-            )
+            await message.answer("❌ Введи ДВА числа (вес и повторения) через пробел. Например: 20 10")
             return
         try:
             weight = float(parts[0].replace(",", "."))
             reps = int(parts[1])
-            if weight < 0 or reps < 1:
-                raise ValueError
+            if weight < 0 or reps < 1: raise ValueError
         except:
-            await message.answer(
-                "❌ Введи корректные числа.\n"
-                "Например: 20 10"
-            )
+            await message.answer("❌ Ошибка ввода. Пример: 20 10")
             return
     else:
         try:
-            reps = int(text)
+            reps = int(raw_text)
             weight = 0
-            if reps < 1:
-                raise ValueError
+            if reps < 1: raise ValueError
         except:
-            await message.answer(
-                "❌ Введи целое число.\n"
-                "Например: 10"
-            )
+            await message.answer("❌ Введи целое число. Например: 10")
             return
 
-    # Сохраняем подход
+    # Сохраняем подход в список
     approaches_data.append({"weight": weight, "reps": reps})
 
-    # Проверяем, последний ли подход
+    # === ПРОВЕРКА: ПОСЛЕДНИЙ ЛИ ЭТО ПОДХОД ===
     if current_set >= total_sets:
-        # Сохраняем все подходы в базу
-        conn = get_connection()
-        cursor = conn.cursor()
+        # 1. Сохраняем ВСЕ подходы в БД
+        for app in approaches_data:
+            save_exercise_result(user_id, program, day, exercise_id, app['weight'], app['reps'], 1)
 
-        # Удаляем старый результат за сегодня
-        cursor.execute("""
-            DELETE FROM history 
-            WHERE user_id=? AND program=? AND day=? AND exercise_id=? 
-            AND date LIKE ?
-        """, (user_id, program, day, exercise_id, datetime.now().strftime("%Y-%m-%d") + "%"))
-
-        # Сохраняем каждый подход как отдельную запись
-        for approach in approaches_data:
-            cursor.execute("""
-                INSERT INTO history (user_id, program, day, exercise_id, weight, reps, approaches, date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (user_id, program, day, exercise_id, approach['weight'], approach['reps'], 1,
-                  datetime.now().strftime("%Y-%m-%d %H:%M")))
-
-        # Отмечаем упражнение как выполненное
-        cursor.execute("""
-            INSERT INTO daily_status (user_id, day, exercise_id, completed, approaches_done)
-            VALUES (?, ?, ?, 1, ?)
-            ON CONFLICT(user_id, day, exercise_id) DO UPDATE SET 
-                completed = 1,
-                approaches_done = excluded.approaches_done
-        """, (user_id, day, exercise_id, total_sets))
-
-        conn.commit()
+        # 2. Отмечаем упражнение как завершенное
+        mark_exercise_completed(user_id, day, exercise_id, total_sets)
         await state.clear()
 
+        # 3. Проверяем, все ли упражнения дня выполнены
         completed = get_completed_exercises(user_id, day)
-        exercises = PROGRAMS[program][day]
-        total_exercises = len([ex for ex in exercises if ex['sets'] > 0])
+        total_exercises = len([ex for ex in PROGRAMS[program][day] if ex['sets'] > 0])
 
+        # 4. Отчет по подходам
         summary = f"✅ {exercise_name} — {total_sets} подходов:\n"
         for i, app in enumerate(approaches_data, 1):
-            weight_str = f"{app['weight']} кг" if has_weight else "—"
-            summary += f"  {i}. {app['reps']} раз × {weight_str}\n"
+            w_str = f"{app['weight']} кг" if has_weight else "—"
+            summary += f"  {i}. {app['reps']} раз × {w_str}\n"
 
+        # 5. Отправка результата
         if len(completed) >= total_exercises:
             await message.answer(
-                f"{summary}\n"
-                f"🎉 ВСЕ УПРАЖНЕНИЯ ДНЯ ЗАВЕРШЕНЫ!",
+                f"{summary}\n\n🎉 ВСЕ УПРАЖНЕНИЯ ДНЯ ВЫПОЛНЕНЫ!",
                 reply_markup=finish_workout_button(program, day)
             )
         else:
             await message.answer(
-                f"{summary}\n\n"
-                f"Осталось упражнений: {total_exercises - len(completed)}",
+                f"{summary}\n\nОсталось упражнений: {total_exercises - len(completed)}",
                 reply_markup=back_to_day_button(program, day)
             )
+        return
+
+    # === ЕСЛИ НЕ ПОСЛЕДНИЙ — ПРОСИМ СЛЕДУЮЩИЙ ===
+    await state.update_data(current_set=current_set + 1, approaches_data=approaches_data)
+    next_set = current_set + 1
+
+    response_text = f"🏋️ {exercise_name}\n\n"
+    response_text += f"✅ Подход №{current_set} сохранён ({reps} раз"
+    if has_weight: response_text += f" × {weight} кг"
+    response_text += ")\n\n"
+    response_text += f"🔹 ПОДХОД №{next_set} из {total_sets}\n\n"
+
+    if has_weight:
+        response_text += "✏️ Введите вес (кг) и повторения через пробел:\nПример: 20 10"
     else:
-        # Сохраняем прогресс и запрашиваем следующий подход
-        await state.update_data(
-            current_set=current_set + 1,
-            approaches_data=approaches_data
-        )
+        response_text += "✏️ Введите количество повторений:\nПример: 10"
 
-        next_set = current_set + 1
-        response_text = f"🏋️ {exercise_name}\n\n"
-        response_text += f"✅ Подход №{current_set} сохранен: {reps} раз"
-        if has_weight:
-            response_text += f" × {weight} кг"
-        response_text += "\n\n"
-        response_text += f"🔹 ПОДХОД №{next_set} из {total_sets}\n\n"
-
-        if has_weight:
-            response_text += "✏️ Введите вес (в кг) и количество повторений через пробел:\n"
-            response_text += "Например: 20 10"
-        else:
-            response_text += "✏️ Введите количество повторений:\n"
-            response_text += "Например: 10"
-
-        await message.answer(
-            response_text,
-            reply_markup=cancel_button(program, day)
-        )
+    await message.answer(response_text, reply_markup=cancel_button(program, day))
 
 
-# === ОТМЕНА ===
 @router.callback_query(lambda c: c.data.startswith("cancel_exercise_"))
 async def cancel_exercise(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
@@ -257,43 +202,34 @@ async def cancel_exercise(callback: types.CallbackQuery, state: FSMContext):
     level = get_user_level(user_id)
     reps = LEVELS[level]["reps"]
 
-    text = f"📅 {day.upper()} | Уровень {level} ({LEVELS[level]['label']})\n\n"
-    text += "Выбери упражнение:\n\n"
-
+    text = f"📅 {day.upper()} | Уровень {level} ({LEVELS[level]['label']})\n\nВыбери упражнение:\n\n"
     for ex in exercises:
-        exercise_id = ex['id']
-        exercise_name = get_exercise_name(exercise_id)
-
+        ex_id = ex['id']
+        ex_name = get_exercise_name(ex_id)
         if ex['sets'] == 0:
-            text += f"⏸️ {exercise_name}\n"
-        elif exercise_id in completed:
-            text += f"✅ {exercise_name} (выполнено)\n"
+            text += f"⏸️ {ex_name}\n"
+        elif ex_id in completed:
+            text += f"✅ {ex_name} (выполнено)\n"
         else:
             ex_reps = ex.get('reps_per_set', reps)
-            text += f"⬜ {exercise_name} — {ex['sets']} подходов по {ex_reps} раз"
-            if ex['weight']:
-                text += " (с весом)"
+            text += f"⬜ {ex_name} — {ex['sets']} подходов по {ex_reps} раз"
+            if ex['weight']: text += " (с весом)"
             text += "\n"
 
-    await callback.message.edit_text(
-        text,
-        reply_markup=get_day_keyboard(program, day, completed)
-    )
+    expander_text = get_expander_text(program, day)
+    if expander_text and day not in ["чт", "вс"]:
+        text += f"\n---\n{expander_text}"
+
+    await callback.message.edit_text(text, reply_markup=get_day_keyboard(program, day, completed))
     await callback.answer()
 
 
-# === ЗАВЕРШЕНИЕ ТРЕНИРОВКИ ===
 @router.callback_query(lambda c: c.data.startswith("finish_workout_"))
 async def finish_workout(callback: types.CallbackQuery):
     _, program, day = callback.data.split("_", 2)
-    user_id = callback.from_user.id
-
-    reset_daily_status(user_id)
-
+    reset_daily_status(callback.from_user.id)
     await callback.message.edit_text(
-        f"🎉 Тренировка на {day.upper()} завершена!\n\n"
-        f"Отличная работа! 💪\n"
-        f"Завтра новая тренировка.",
+        f"🎉 Тренировка на {day.upper()} завершена!\n\nОтличная работа! 💪",
         reply_markup=main_menu()
     )
     await callback.answer()

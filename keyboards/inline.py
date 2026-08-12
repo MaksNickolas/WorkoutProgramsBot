@@ -35,13 +35,11 @@ def get_day_keyboard(program, day, completed_exercises):
     for ex in exercises:
         if ex['sets'] == 0:
             continue
-        # Используем ID для callback, но показываем красивое название
-        exercise_id = ex['id']
-        exercise_name = get_exercise_name(exercise_id)
-        if exercise_id not in completed_exercises:
+        ex_id = ex['id']
+        if ex_id not in completed_exercises:
             kb.append([InlineKeyboardButton(
-                text=f"💪 {exercise_name}",
-                callback_data=f"ex_{program}_{day}_{exercise_id}"
+                text=f"💪 {get_exercise_name(ex_id)}",
+                callback_data=f"ex_{program}_{day}_{ex_id}"
             )])
 
     if not kb:
