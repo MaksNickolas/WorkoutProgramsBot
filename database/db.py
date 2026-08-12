@@ -219,23 +219,27 @@ def get_today_exercise_result(user_id, program, day, exercise):
     return result if result else None
 
 
-def get_exercise_history(user_id, program, day, exercise):
+def get_exercise_history(user_id, program, day, exercise_id):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
         SELECT weight, reps, approaches, date FROM history 
-        WHERE user_id=? AND program=? AND day=? AND exercise=?
+        WHERE user_id=? AND program=? AND day=? AND exercise_id=?
         ORDER BY date DESC LIMIT 1
-    """, (user_id, program, day, exercise))
+    """, (user_id, program, day, exercise_id))
     result = cursor.fetchone()
-    return result if result else None
+    conn.close()
+
+    if result:
+        return {"weight": result["weight"], "reps": result["reps"], "approaches": result["approaches"],
+                "date": result["date"]}
+    else:
+        # Возвращаем нулевые значения, если история пуста
+        return {"weight": 0, "reps": 0, "approaches": 0, "date": "—"}
 
 
 def get_today_exercise_details(user_id, program, day, exercise_id):
-    """
-    Возвращает все подходы по упражнению за сегодняшнюю тренировку
-    с указанием веса и повторений для каждого подхода.
-    """
+    """Возвращает все подходы за сегодня. Если нет данных — возвращает пустой список."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -248,5 +252,5 @@ def get_today_exercise_details(user_id, program, day, exercise_id):
     results = cursor.fetchall()
     conn.close()
 
-    # Преобразуем в список словарей
+    # Если нет результатов — возвращаем пустой список (для отображения "—")
     return [{"weight": row["weight"], "reps": row["reps"], "date": row["date"]} for row in results]

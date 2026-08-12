@@ -63,26 +63,36 @@ EXERCISES = {
     "prisedaniya_pistoletikom": "Приседания пистолетиком (на одной ноге)",
     "skalolaz": "Скалолаз (в упоре лежа колени к груди)",
 
-    # === ДАЧА (СБ) ===
+    # === ДАЧА (ВТ) ===
     "otzhimaniya_s_uzkoy_postanovkoy": "Отжимания с узкой постановкой рук (алмазные)",
     "otzhimaniya_nogami_na_stule": "Отжимания ногами на стуле",
     "obratnye_otzhimaniya_ot_stula": "Обратные отжимания от стула",
     "supermen_progib": "Супермен (прогиб лежа)",
 
-    # === ДАЧА (ВС) ===
+    # === ДАЧА (СР) ===
     "skruchivaniya_s_pryamymi_nogami": "Скручивания с прямыми ногами",
     "nozhnicy": "Ножницы (лежа)",
     "berpi_bez_pryzhka": "Берпи без прыжка",
     "beg_na_meste_s_zahlyustom": "Бег на месте с захлестом",
 
-    # === ОБЩИЕ ДЛЯ ОТДЫХА ===
+    # === ДАЧА (ПТ) ===
+    "otzhimaniya_shirokim_hvatom_dacha": "Отжимания широким хватом",
+    "bokovaya_planka": "Боковая планка",
+    "vypady_nazad": "Выпады назад",
+
+    # === ДАЧА (СБ) — ИСПРАВЛЕНО! ===
+    "burpi_polnye": "Бурпи (полные)",
+    "prisedaniya_sumo": "Приседания сумо",
+    "planka_s_podnyatoy_nogoy": "Планка с поднятой ногой",
+
+    # === ОБЩИЕ ===
     "otdyh_rastyazhka": "Отдых / Растяжка",
     "aktivnyy_otdyh": "Активный отдых",
     "yoga_rastyazhka": "Йога / Растяжка",
     "otdyh": "Отдых"
 }
 
-# === ПРОГРАММЫ С ID УПРАЖНЕНИЙ (ЭСПАНДЕРЫ УБРАНЫ ИЗ ОСНОВНЫХ, ВЫНЕСЕНЫ В КОНЦЕ КАК РЕКОМЕНДАЦИЯ) ===
+# === ПРОГРАММЫ ===
 PROGRAMS = {
     "дом": {
         "пн": [
@@ -101,7 +111,7 @@ PROGRAMS = {
             {"id": "sgibanie_zapyastiy_sidya", "sets": 5, "weight": True, "reps_per_set": 20},
             {"id": "obratnye_sgibaniya", "sets": 5, "weight": True, "reps_per_set": 15},
             {"id": "skruchivaniya_s_gantelyu_na_grudi", "sets": 4, "weight": True, "reps_per_set": 25},
-            {"id": "planka_s_girey_na_spine", "sets": 3, "weight": False, "reps_per_set": 60},  # 60 секунд
+            {"id": "planka_s_girey_na_spine", "sets": 3, "weight": False, "reps_per_set": 60},
         ],
         "чт": [{"id": "otdyh_rastyazhka", "sets": 0, "weight": False}],
         "пт": [
@@ -119,7 +129,7 @@ PROGRAMS = {
     "улица": {
         "пн": [
             {"id": "podtyagivaniya_shirokim_hvatom_s_vesom", "sets": 5, "weight": True, "reps_per_set": 5},
-            {"id": "vyhod_siloy_na_2_ruki", "sets": 5, "weight": False, "reps_per_set": 5},  # попытки
+            {"id": "vyhod_siloy_na_2_ruki", "sets": 5, "weight": False, "reps_per_set": 5},
             {"id": "avstraliyskie_podtyagivaniya", "sets": 5, "weight": False, "reps_per_set": 12},
         ],
         "вт": [
@@ -135,20 +145,20 @@ PROGRAMS = {
         "чт": [{"id": "otdyh", "sets": 0, "weight": False}],
         "пт": [
             {"id": "podtyagivaniya_za_golovu", "sets": 5, "weight": True, "reps_per_set": 8},
-            {"id": "ugolok_na_turnike", "sets": 5, "weight": False, "reps_per_set": 20},  # 20 секунд
+            {"id": "ugolok_na_turnike", "sets": 5, "weight": False, "reps_per_set": 20},
             {"id": "tyaga_nog_v_vise", "sets": 4, "weight": False, "reps_per_set": 20},
         ],
         "сб": [
-            {"id": "krugovaya_10_20_30", "sets": 5, "weight": False, "reps_per_set": 1}  # 1 круг
+            {"id": "krugovaya_10_20_30", "sets": 5, "weight": False, "reps_per_set": 1}
         ],
         "вс": [{"id": "aktivnyy_otdyh", "sets": 0, "weight": False}]
     },
     "дача": {
         "пн": [
-            {"id": "otzhimaniya_v_stoyke_u_steny", "sets": 5, "weight": False, "reps_per_set": 20},  # макс = 20+
-            {"id": "planka_na_odnoy_ruke", "sets": 3, "weight": False, "reps_per_set": 45},  # 45 секунд
+            {"id": "otzhimaniya_v_stoyke_u_steny", "sets": 5, "weight": False, "reps_per_set": 20},
+            {"id": "planka_na_odnoy_ruke", "sets": 3, "weight": False, "reps_per_set": 45},
             {"id": "prisedaniya_pistoletikom", "sets": 5, "weight": False, "reps_per_set": 5},
-            {"id": "skalolaz", "sets": 4, "weight": False, "reps_per_set": 30},  # 30 секунд
+            {"id": "skalolaz", "sets": 4, "weight": False, "reps_per_set": 30},
         ],
         "вт": [
             {"id": "otzhimaniya_s_uzkoy_postanovkoy", "sets": 5, "weight": False, "reps_per_set": 15},
@@ -158,58 +168,56 @@ PROGRAMS = {
         ],
         "ср": [
             {"id": "skruchivaniya_s_pryamymi_nogami", "sets": 5, "weight": False, "reps_per_set": 25},
-            {"id": "nozhnicy", "sets": 4, "weight": False, "reps_per_set": 30},  # 30 секунд
+            {"id": "nozhnicy", "sets": 4, "weight": False, "reps_per_set": 30},
             {"id": "berpi_bez_pryzhka", "sets": 5, "weight": False, "reps_per_set": 15},
-            {"id": "beg_na_meste_s_zahlyustom", "sets": 5, "weight": False, "reps_per_set": 60},  # 60 секунд
+            {"id": "beg_na_meste_s_zahlyustom", "sets": 5, "weight": False, "reps_per_set": 60},
         ],
         "чт": [{"id": "otdyh_rastyazhka", "sets": 0, "weight": False}],
         "пт": [
-            {"id": "otzhimaniya_shirokim_hvatom", "sets": 5, "weight": False, "reps_per_set": 15},
-            {"id": "bokovaya_planka", "sets": 4, "weight": False, "reps_per_set": 30},  # 30 секунд
+            {"id": "otzhimaniya_shirokim_hvatom_dacha", "sets": 5, "weight": False, "reps_per_set": 15},
+            {"id": "bokovaya_planka", "sets": 4, "weight": False, "reps_per_set": 30},
             {"id": "vypady_nazad", "sets": 5, "weight": False, "reps_per_set": 20},
         ],
         "сб": [
             {"id": "burpi_polnye", "sets": 5, "weight": False, "reps_per_set": 10},
             {"id": "prisedaniya_sumo", "sets": 5, "weight": False, "reps_per_set": 20},
-            {"id": "planka_s_podnyatoy_nogoy", "sets": 4, "weight": False, "reps_per_set": 30},  # 30 секунд
+            {"id": "planka_s_podnyatoy_nogoy", "sets": 4, "weight": False, "reps_per_set": 30},
         ],
         "вс": [{"id": "yoga_rastyazhka", "sets": 0, "weight": False}]
     }
 }
 
-# === РЕКОМЕНДАЦИЯ ПО ЭСПАНДЕРАМ (В КОНЦЕ КАЖДОЙ ТРЕНИРОВКИ) ===
+# === ЭСПАНДЕРЫ (ТОЛЬКО РЕКОМЕНДАЦИЯ) ===
 EXPANDER_RECOMMENDATION = {
     "дом": {
-        "пн": "💪 В конце тренировки: Эспандер 35-40 кг — 5 подходов по 6-8 раз (силовой режим, медленно)",
-        "вт": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода по 15-20 раз (объемный режим, быстро)",
-        "ср": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода (2 силовых по 6-8 + 2 объемных по 15)",
-        "пт": "💪 В конце тренировки: Эспандер 35-40 кг — 5 подходов по 6-8 раз (силовой режим, медленно)",
-        "сб": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода по 15-20 раз (объемный режим, быстро)",
+        "пн": "💪 В конце тренировки: Эспандер 35-40 кг — 5 подходов по 6-8 раз (силовой)",
+        "вт": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода по 15-20 раз (объемный)",
+        "ср": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода (2 силовых + 2 объемных)",
+        "пт": "💪 В конце тренировки: Эспандер 35-40 кг — 5 подходов по 6-8 раз (силовой)",
+        "сб": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода по 15-20 раз (объемный)",
     },
     "улица": {
-        "пн": "💪 В конце тренировки: Эспандер 35-40 кг — 5 подходов по 6-8 раз (силовой режим, медленно)",
-        "вт": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода по 15-20 раз (объемный режим, быстро)",
-        "ср": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода (2 силовых по 6-8 + 2 объемных по 15)",
-        "пт": "💪 В конце тренировки: Эспандер 35-40 кг — 5 подходов по 6-8 раз (силовой режим, медленно)",
-        "сб": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода по 15-20 раз (объемный режим, быстро)",
+        "пн": "💪 В конце тренировки: Эспандер 35-40 кг — 5 подходов по 6-8 раз (силовой)",
+        "вт": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода по 15-20 раз (объемный)",
+        "ср": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода (2 силовых + 2 объемных)",
+        "пт": "💪 В конце тренировки: Эспандер 35-40 кг — 5 подходов по 6-8 раз (силовой)",
+        "сб": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода по 15-20 раз (объемный)",
     },
     "дача": {
-        "пн": "💪 В конце тренировки: Эспандер 35-40 кг — 5 подходов по 6-8 раз (силовой режим, медленно)",
-        "вт": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода по 15-20 раз (объемный режим, быстро)",
-        "ср": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода (2 силовых по 6-8 + 2 объемных по 15)",
-        "пт": "💪 В конце тренировки: Эспандер 35-40 кг — 5 подходов по 6-8 раз (силовой режим, медленно)",
-        "сб": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода по 15-20 раз (объемный режим, быстро)",
+        "пн": "💪 В конце тренировки: Эспандер 35-40 кг — 5 подходов по 6-8 раз (силовой)",
+        "вт": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода по 15-20 раз (объемный)",
+        "ср": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода (2 силовых + 2 объемных)",
+        "пт": "💪 В конце тренировки: Эспандер 35-40 кг — 5 подходов по 6-8 раз (силовой)",
+        "сб": "💪 В конце тренировки: Эспандер 35-40 кг — 4 подхода по 15-20 раз (объемный)",
     }
 }
 
 
 def get_exercise_name(exercise_id):
-    """Возвращает красивое название упражнения по ID"""
     return EXERCISES.get(exercise_id, exercise_id)
 
 
 def get_expander_text(program, day):
-    """Возвращает текст с рекомендацией по эспандеру для данного дня"""
     return EXPANDER_RECOMMENDATION.get(program, {}).get(day, "")
 
 

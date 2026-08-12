@@ -76,17 +76,17 @@ async def start_exercise(callback: types.CallbackQuery, state: FSMContext):
 
     text = f"🏋️ {exercise_name}\n\n"
 
-    # === ПОКАЗЫВАЕМ ДЕТАЛЬНУЮ ИСТОРИЮ (ЕСЛИ ЕСТЬ) ===
+    # === ПОКАЗЫВАЕМ ДЕТАЛЬНУЮ ИСТОРИЮ ===
     if today_details:
         text += f"📊 ТВОЯ ПОСЛЕДНЯЯ ТРЕНИРОВКА ({today_details[0]['date']}):\n"
         for i, app in enumerate(today_details, 1):
             weight_str = f"{app['weight']} кг" if has_weight and app['weight'] else "—"
             text += f"  Подход {i}: {app['reps']} раз × {weight_str}\n"
         text += "\n"
-    elif last_result and not today_details:
-        # Если есть старая история, но нет записей за сегодня
+    elif last_result and last_result.get('date') != "—":
         text += f"📊 ПОСЛЕДНИЙ РЕЗУЛЬТАТ (из другой тренировки):\n"
-        text += f"Вес: {last_result['weight'] if last_result['weight'] else '—'} кг\n"
+        weight_str = f"{last_result['weight']} кг" if has_weight and last_result['weight'] else "—"
+        text += f"Вес: {weight_str}\n"
         text += f"Повторов: {last_result['reps']}\n"
         text += f"Подходов: {last_result['approaches']}\n"
         text += f"📅 {last_result['date']}\n\n"
